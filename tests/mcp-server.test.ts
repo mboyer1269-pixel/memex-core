@@ -11,7 +11,23 @@ test('MCP Server Capabilities Verification', () => {
   const resources = getAuthorizedResources();
 
   // Verify capabilities strictly match expectations
-  assert.strictEqual(tools.length, 10);
+  const expectedToolNames = [
+    'agentmemory_graph_query',
+    'agentmemory_context_pack',
+    'agentmemory_librarian_brief',
+    'agentmemory_latest_updates',
+    'agentmemory_project_state',
+    'agentmemory_tool_catalog_search',
+    'agentmemory_submit_proposal',
+    'agentmemory_read_vault_file',
+    'agentmemory_write_vault_file',
+    'agentmemory_search_vault'
+  ];
+  
+  const actualToolNames = tools.map((t: any) => t.name).sort();
+  const sortedExpectedNames = [...expectedToolNames].sort();
+  
+  assert.deepStrictEqual(actualToolNames, sortedExpectedNames, 'Authorized tools list does not explicitly match the expected contract');
   assert.strictEqual(resources.length, 2);
 
   // No graph mutation tools exist (Vault tools are allowed to write)
@@ -68,7 +84,22 @@ test('MCP Server Integration Test', async () => {
     try {
         // 3. Test listTools
         const tools = await client.listTools();
-        assert.strictEqual(tools.tools.length, 10, 'Should have exactly 10 tools authorized');
+        const expectedToolNames = [
+          'agentmemory_graph_query',
+          'agentmemory_context_pack',
+          'agentmemory_librarian_brief',
+          'agentmemory_latest_updates',
+          'agentmemory_project_state',
+          'agentmemory_tool_catalog_search',
+          'agentmemory_submit_proposal',
+          'agentmemory_read_vault_file',
+          'agentmemory_write_vault_file',
+          'agentmemory_search_vault'
+        ];
+        const actualToolNames = tools.tools.map((t: any) => t.name).sort();
+        const sortedExpectedNames = [...expectedToolNames].sort();
+        
+        assert.deepStrictEqual(actualToolNames, sortedExpectedNames, 'Integration test: Authorized tools list does not explicitly match the expected contract');
         
         // 4. Test listResources
         const resources = await client.listResources();
