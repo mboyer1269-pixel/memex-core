@@ -11,15 +11,33 @@ test('MCP Server Capabilities Verification', () => {
   const resources = getAuthorizedResources();
 
   // Verify capabilities strictly match expectations
-  assert.strictEqual(tools.length, 7);
+  const expectedToolNames = [
+    'agentmemory_graph_query',
+    'agentmemory_context_pack',
+    'agentmemory_librarian_brief',
+    'agentmemory_latest_updates',
+    'agentmemory_project_state',
+    'agentmemory_tool_catalog_search',
+    'agentmemory_submit_proposal',
+    'agentmemory_read_vault_file',
+    'agentmemory_write_vault_file',
+    'agentmemory_search_vault'
+  ];
+  
+  const actualToolNames = tools.map((t: any) => t.name).sort();
+  const sortedExpectedNames = [...expectedToolNames].sort();
+  
+  assert.deepStrictEqual(actualToolNames, sortedExpectedNames, 'Authorized tools list does not explicitly match the expected contract');
   assert.strictEqual(resources.length, 2);
 
-  // No write tools exist
+  // No graph mutation tools exist (Vault tools are allowed to write)
   const forbiddenKeywords = ['add', 'create', 'delete', 'write', 'mutate'];
   tools.forEach((t: any) => {
-    forbiddenKeywords.forEach(k => {
-      assert.ok(!t.name.includes(k), `Tool name ${t.name} contains forbidden keyword ${k}`);
-    });
+    if (!t.name.includes('_vault_')) {
+      forbiddenKeywords.forEach(k => {
+        assert.ok(!t.name.includes(k), `Tool name ${t.name} contains forbidden keyword ${k}`);
+      });
+    }
   });
 
   // agentmemory_graph_query parameters
@@ -66,7 +84,22 @@ test('MCP Server Integration Test', async () => {
     try {
         // 3. Test listTools
         const tools = await client.listTools();
-        assert.strictEqual(tools.tools.length, 7, 'Should have exactly 7 tools authorized');
+        const expectedToolNames = [
+          'agentmemory_graph_query',
+          'agentmemory_context_pack',
+          'agentmemory_librarian_brief',
+          'agentmemory_latest_updates',
+          'agentmemory_project_state',
+          'agentmemory_tool_catalog_search',
+          'agentmemory_submit_proposal',
+          'agentmemory_read_vault_file',
+          'agentmemory_write_vault_file',
+          'agentmemory_search_vault'
+        ];
+        const actualToolNames = tools.tools.map((t: any) => t.name).sort();
+        const sortedExpectedNames = [...expectedToolNames].sort();
+        
+        assert.deepStrictEqual(actualToolNames, sortedExpectedNames, 'Integration test: Authorized tools list does not explicitly match the expected contract');
         
         // 4. Test listResources
         const resources = await client.listResources();
