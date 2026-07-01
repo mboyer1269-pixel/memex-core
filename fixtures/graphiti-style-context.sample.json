@@ -1,0 +1,25 @@
+{
+  "graph_context": {
+    "center_node": {
+      "id": "e_123",
+      "type": "Person",
+      "name": "Alice"
+    },
+    "episodes": [
+      {
+        "id": "ep_001",
+        "timestamp": "2026-06-05T10:00:00Z",
+        "summary": "Alice requested an architecture review."
+      }
+    ],
+    "validity_windows": [
+      {
+        "relation_id": "r_456",
+        "source": "e_123",
+        "target": "e_789",
+        "valid_from": "2026-01-01T00:00:00Z",
+        "valid_to": null
+      }
+    ]
+  }
+}

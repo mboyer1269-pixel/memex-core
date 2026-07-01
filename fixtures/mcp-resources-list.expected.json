@@ -1,0 +1,14 @@
+{
+  "resources": [
+    {
+      "uri": "agentmemory://health",
+      "name": "System Health",
+      "description": "Read-only system health status and basic stats."
+    },
+    {
+      "uri": "agentmemory://schema",
+      "name": "Graph Schema",
+      "description": "The graph schema detailing valid entity types, relation types, and namespace patterns."
+    }
+  ]
+}

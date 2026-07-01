@@ -1,0 +1,194 @@
+{
+  "tools": [
+    {
+      "name": "agentmemory_graph_query",
+      "description": "Query the local AgentMemory SQLite graph strictly in read-only mode.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "The targeted tenant namespace."
+          },
+          "entityType": {
+            "type": "string",
+            "description": "The entity type to filter by."
+          }
+        },
+        "required": ["namespace"]
+      }
+    },
+    {
+      "name": "agentmemory_context_pack",
+      "description": "Fetch a structured JSON context pack and markdown prompt section based on a center entity ID.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "The targeted tenant namespace."
+          },
+          "centerEntityId": {
+            "type": "string",
+            "description": "The UUID of the central entity."
+          },
+          "maxEntities": {
+            "type": "number",
+            "description": "Hard limit on related entities returned. Max 50."
+          },
+          "maxRelations": {
+            "type": "number",
+            "description": "Hard limit on relations returned. Max 50."
+          }
+        },
+        "required": ["namespace", "centerEntityId"]
+      }
+    },
+    {
+      "name": "agentmemory_librarian_brief",
+      "description": "Get a compressed librarian briefing for a task, respecting a token budget.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "The targeted tenant namespace."
+          },
+          "task": {
+            "type": "string",
+            "description": "The task description to provide context."
+          },
+          "tokenBudget": {
+            "type": "number",
+            "description": "Maximum allowed tokens for the brief."
+          }
+        },
+        "required": ["namespace", "task", "tokenBudget"]
+      }
+    },
+    {
+      "name": "agentmemory_latest_updates",
+      "description": "Get the latest updates/timeline events for a namespace.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "The targeted tenant namespace."
+          },
+          "tokenBudget": {
+            "type": "number",
+            "description": "Optional token budget limit."
+          }
+        },
+        "required": ["namespace"]
+      }
+    },
+    {
+      "name": "agentmemory_project_state",
+      "description": "Get the current state of a project within a namespace.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "The targeted tenant namespace."
+          },
+          "tokenBudget": {
+            "type": "number",
+            "description": "Optional token budget limit."
+          }
+        },
+        "required": ["namespace"]
+      }
+    },
+    {
+      "name": "agentmemory_tool_catalog_search",
+      "description": "Search for tools/skills matching a specific intent.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "The targeted tenant namespace."
+          },
+          "intent": {
+            "type": "string",
+            "description": "The search intent to filter tools by."
+          },
+          "tokenBudget": {
+            "type": "number",
+            "description": "Optional token budget limit."
+          }
+        },
+        "required": ["namespace", "intent"]
+      }
+    },
+    {
+      "name": "agentmemory_submit_proposal",
+      "description": "Submit a proposal for new entities or relations via the Controlled Intake Library.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tenant": { "type": "string" },
+          "namespace": { "type": "string" },
+          "proposedBy": { "type": "string" },
+          "sourceClient": { "type": "string" },
+          "content": { "type": "string" },
+          "suggestedEntities": { "type": "string", "description": "JSON string of suggested entities" },
+          "suggestedRelations": { "type": "string", "description": "JSON string of suggested relations" },
+          "provenance": { "type": "string" },
+          "confidence": { "type": "number" },
+          "riskFlags": { "type": "string" }
+        },
+        "required": ["tenant", "namespace", "proposedBy", "sourceClient", "content"]
+      }
+    },
+    {
+      "name": "agentmemory_read_vault_file",
+      "description": "Read a Markdown file from the Obsidian Vault (e.g. skills/my_skill.md).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filepath": {
+            "type": "string",
+            "description": "Relative path within the vault (e.g., skills/deploy.md)"
+          }
+        },
+        "required": ["filepath"]
+      }
+    },
+    {
+      "name": "agentmemory_write_vault_file",
+      "description": "Write or create a Markdown file in the Obsidian Vault.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filepath": {
+            "type": "string",
+            "description": "Relative path within the vault"
+          },
+          "content": {
+            "type": "string",
+            "description": "The Markdown content to write"
+          }
+        },
+        "required": ["filepath", "content"]
+      }
+    },
+    {
+      "name": "agentmemory_search_vault",
+      "description": "Search the Obsidian Vault for files matching a keyword.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query"
+          }
+        },
+        "required": ["query"]
+      }
+    }
+  ]
+}

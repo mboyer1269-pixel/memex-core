@@ -1,0 +1,29 @@
+{
+  "name": "memex-core",
+  "private": true,
+  "version": "0.7.0",
+  "type": "module",
+  "scripts": {
+    "hub": "pwsh ./agentmemory-hub.ps1",
+    "check": "node --experimental-strip-types --check src/graph-cli.ts && node --experimental-strip-types --check src/graph.ts",
+    "test": "node --experimental-strip-types --test tests/graph.test.ts tests/memory-context.test.ts tests/librarian.test.ts tests/mcp-contract.test.ts tests/mcp-server.test.ts tests/mcp-client-sandbox.test.ts tests/mcp-config-examples.test.ts tests/gen16-empirical.test.ts tests/intake.test.ts",
+    "test:limit": "node --experimental-strip-types tests/test-milestone1.ts",
+    "start": "node --experimental-strip-types src/server.ts",
+    "dev": "node --experimental-strip-types src/server.ts",
+    "mcp": "node --experimental-strip-types src/mcp/server.ts",
+    "gateway": "node --experimental-strip-types src/mcp/gateway.ts",
+    "worker": "node --experimental-strip-types src/ai/worker.ts",
+    "test-milestone1": "node --experimental-strip-types tests/test-milestone1.ts"
+  },
+  "dependencies": {
+    "@agentmemory/agentmemory": "^0.9.21",
+    "@agentmemory/mcp": "^0.9.21",
+    "@modelcontextprotocol/sdk": "1.0.1",
+    "better-sqlite3": "^12.10.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.0"
+  }
+}

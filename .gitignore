@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Environment & Secrets
+.env
+.env.*
+
+# Data (SQLite DBs, Vault personal data)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Scratch & temp files (dev artifacts from earlier iterations)
+scratch/
+found_server.txt
+latest_files.json
+latest_files_utf8.json
+challenge_*.ts
+challenger_test.ts
+check.ts
+run_*.js
+search.js
+stress*.ts
+stress*.js
+strict_stress_test*.ts
+test-librarian-script.ts
+test-limit-bypass.ts
+test_*.ts
+test_*.js
+
+# Agent config (local-only)
+.agents/

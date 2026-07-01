@@ -1,0 +1,20 @@
+{
+  "memories": [
+    {
+      "id": "mem_9a8b7c6d",
+      "text": "User prefers TypeScript over Python for local-first tooling.",
+      "hash": "a1b2c3d4e5f6...",
+      "metadata": {
+        "user_id": "u_123",
+        "category": "preferences"
+      },
+      "created_at": "2026-06-05T10:00:00Z"
+    }
+  ],
+  "entities": [
+    {
+      "name": "TypeScript",
+      "type": "technology"
+    }
+  ]
+}

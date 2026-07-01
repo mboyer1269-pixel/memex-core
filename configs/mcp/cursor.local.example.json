@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "memex-core": {
+      "command": "node",
+      "args": [
+        "--experimental-strip-types",
+        "<PATH_TO_AGENTMEMORY_HUB>/src/mcp/server.ts"
+      ]
+    }
+  }
+}
