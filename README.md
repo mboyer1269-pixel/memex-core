@@ -102,7 +102,8 @@ memex-core/
 │       └── Human/             # Vos notes (lecture seule pour l'IA)
 ├── tests/                     # 55 tests (100% pass)
 ├── fixtures/                  # Contrats MCP
-└── memex-core.ps1             # CLI principal
+└── bin/
+    └── memex-core.ps1         # CLI principal
 ```
 
 ## 🛡️ Sécurité

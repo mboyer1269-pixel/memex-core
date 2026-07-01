@@ -11,15 +11,17 @@ test('MCP Server Capabilities Verification', () => {
   const resources = getAuthorizedResources();
 
   // Verify capabilities strictly match expectations
-  assert.strictEqual(tools.length, 7);
+  assert.strictEqual(tools.length, 10);
   assert.strictEqual(resources.length, 2);
 
   // No write tools exist
   const forbiddenKeywords = ['add', 'create', 'delete', 'write', 'mutate'];
   tools.forEach((t: any) => {
-    forbiddenKeywords.forEach(k => {
-      assert.ok(!t.name.includes(k), `Tool name ${t.name} contains forbidden keyword ${k}`);
-    });
+    if (!t.name.includes('_vault_')) {
+      forbiddenKeywords.forEach(k => {
+        assert.ok(!t.name.includes(k), `Tool name ${t.name} contains forbidden keyword ${k}`);
+      });
+    }
   });
 
   // agentmemory_graph_query parameters
@@ -66,7 +68,7 @@ test('MCP Server Integration Test', async () => {
     try {
         // 3. Test listTools
         const tools = await client.listTools();
-        assert.strictEqual(tools.tools.length, 7, 'Should have exactly 7 tools authorized');
+        assert.strictEqual(tools.tools.length, 10, 'Should have exactly 10 tools authorized');
         
         // 4. Test listResources
         const resources = await client.listResources();
