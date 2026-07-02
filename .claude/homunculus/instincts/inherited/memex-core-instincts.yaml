@@ -1,0 +1,409 @@
+# Instincts generated from https://github.com/mboyer1269-pixel/memex-core
+# Generated: 2026-07-02T02:28:56.634Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: memex-core-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/mboyer1269-pixel/memex-core
+---
+
+# Memex Core Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: docs, feat
+
+## Evidence
+
+- 7 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: add personal memory fabric blueprint, docs: add memory fabric supporting blueprints
+
+---
+id: memex-core-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/mboyer1269-pixel/memex-core
+---
+
+# Memex Core Commit Length
+
+## Action
+
+Keep commit messages concise (~46 characters)
+
+## Evidence
+
+- Average commit message length: 46 chars
+- Based on 7 commits
+
+---
+id: memex-core-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/mboyer1269-pixel/memex-core
+---
+
+# Memex Core Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: memex-core-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/mboyer1269-pixel/memex-core
+---
+
+# Memex Core Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: memex-core-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/mboyer1269-pixel/memex-core
+---
+
+# Memex Core Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: memex-core-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/mboyer1269-pixel/memex-core
+---
+
+# Memex Core Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: memex-core-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/mboyer1269-pixel/memex-core
+---
+
+# Memex Core Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~30x per month
+- Files: src/fabric/*, tests/*, **/*.test.*
+
+---
+id: memex-core-workflow-add-new-documentation-blueprint
+trigger: "when doing add new documentation blueprint"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/mboyer1269-pixel/memex-core
+---
+
+# Memex Core Workflow Add New Documentation Blueprint
+
+## Action
+
+Follow the add-new-documentation-blueprint workflow:
+1. Create a new markdown file in the docs/ directory with the relevant blueprint or integration details
+2. Commit the new file with a descriptive message
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: docs/*.md
+
+---
+id: memex-core-instinct-file-naming
+trigger: "When creating a new file in the codebase"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct File Naming
+
+## Action
+
+Name the file using snake_case
+
+## Evidence
+
+- Pattern in namingConventions.files
+- Observed in src/fabric/*
+
+---
+id: memex-core-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Function Naming
+
+## Action
+
+Use camelCase for function names
+
+## Evidence
+
+- Pattern in namingConventions.functions
+
+---
+id: memex-core-instinct-class-naming
+trigger: "When creating a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Class Naming
+
+## Action
+
+Use PascalCase for class names
+
+## Evidence
+
+- Pattern in namingConventions.classes
+
+---
+id: memex-core-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names
+
+## Evidence
+
+- Pattern in namingConventions.constants
+
+---
+id: memex-core-instinct-import-style
+trigger: "When importing modules in TypeScript files"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle
+- Seen in src/fabric/*
+
+---
+id: memex-core-instinct-export-style
+trigger: "When exporting from a module"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle
+
+---
+id: memex-core-instinct-test-location
+trigger: "When adding or updating tests"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Test Location
+
+## Action
+
+Place test files in the separate tests/ directory and/or use *.test.* naming
+
+## Evidence
+
+- architecture.folderStructure.testLocation
+- workflow.feature-development.filesInvolved
+
+---
+id: memex-core-instinct-test-sequence
+trigger: "When implementing a new feature"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Test Sequence
+
+## Action
+
+Add or update tests for the feature after implementation
+
+## Evidence
+
+- workflow.feature-development.commitSequence
+- Example: Add tests for feature follows Add feature implementation
+
+---
+id: memex-core-instinct-git-commit-format
+trigger: "When making a commit"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Git Commit Format
+
+## Action
+
+Use conventional commit prefixes (e.g., 'feat:', 'docs:') followed by a concise description
+
+## Evidence
+
+- commits.prefixes
+- Examples: 'feat: add personal memory fabric blueprint'
+
+---
+id: memex-core-instinct-git-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Git Commit Length
+
+## Action
+
+Keep the commit message concise (around 46 characters on average)
+
+## Evidence
+
+- commits.averageLength
+
+---
+id: memex-core-instinct-feature-dev-workflow
+trigger: "When developing a new feature for memory fabric"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Feature Dev Workflow
+
+## Action
+
+Follow the sequence: implement feature in src/fabric, add tests in tests/, update documentation in docs/
+
+## Evidence
+
+- workflow.feature-development.commitSequence
+- workflow.feature-development.filesInvolved
+
+---
+id: memex-core-instinct-add-doc-blueprint-workflow
+trigger: "When documenting a new blueprint, integration, or security model for memory fabric"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: mboyer1269-pixel/memex-core
+---
+
+# Memex Core Instinct Add Doc Blueprint Workflow
+
+## Action
+
+Create a new markdown file in docs/ with relevant details and commit with a descriptive message
+
+## Evidence
+
+- workflow.add-new-documentation-blueprint.steps
+- workflow.add-new-documentation-blueprint.example.commits
+
