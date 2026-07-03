@@ -1,0 +1,26 @@
+# Memex Core — reverse proxy TLS (Caddy)
+# ----------------------------------------
+# 1. Pointe un sous-domaine vers l'IP du VPS (A record), p.ex. memex.tondomaine.com
+# 2. Remplace le placeholder ci-dessous
+# 3. sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
+# Caddy obtient et renouvelle le certificat Let's Encrypt automatiquement.
+
+memex.EXAMPLE.com {
+	# Le gateway n'écoute que sur 127.0.0.1:3000 (GATEWAY_HOST) —
+	# seul Caddy est exposé à l'internet.
+	reverse_proxy 127.0.0.1:3000
+
+	# SSE : désactiver la mise en tampon pour /sse
+	@sse path /sse
+	reverse_proxy @sse 127.0.0.1:3000 {
+		flush_interval -1
+	}
+
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}

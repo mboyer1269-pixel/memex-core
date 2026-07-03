@@ -1,0 +1,26 @@
+[Unit]
+Description=Memex Core Background Worker (consolidation, distillation, sleep cycle)
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=memex
+Group=memex
+WorkingDirectory=/opt/memex-core
+EnvironmentFile=/etc/memex-core/memex.env
+ExecStart=/usr/bin/node --experimental-strip-types src/ai/worker.ts
+Restart=always
+RestartSec=15
+
+# Durcissement
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/memex-core
+PrivateTmp=true
+CapabilityBoundingSet=
+MemoryMax=768M
+
+[Install]
+WantedBy=multi-user.target
