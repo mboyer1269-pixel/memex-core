@@ -22,9 +22,11 @@ export class SmartRouter {
    * Priority for 'high': OpenRouter top-tier (Claude/GPT-4o/Gemini Pro)
    */
   async callModel(prompt: string, complexity: TaskComplexity = 'medium'): Promise<string> {
-    // Always try Ollama first for low/medium to save costs
+    // Always try Ollama first for low/medium to save costs.
+    // OLLAMA_MODEL lets small VPSes run a 3B model (e.g. llama3.2:3b)
+    // instead of the 8GB-RAM llama3 default.
     if (complexity === 'low' || complexity === 'medium') {
-      const localResult = await this.callOllama(prompt, 'llama3');
+      const localResult = await this.callOllama(prompt, process.env.OLLAMA_MODEL || 'llama3');
       if (localResult !== null) return localResult;
     }
 

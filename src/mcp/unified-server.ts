@@ -329,8 +329,11 @@ export async function runHttp(): Promise<void> {
 
   const app = createHttpApp();
   const PORT = Number(process.env.GATEWAY_PORT) || 3000;
+  // Behind a reverse proxy (Caddy/nginx), set GATEWAY_HOST=127.0.0.1 so the
+  // gateway is never reachable directly from the internet.
+  const HOST = process.env.GATEWAY_HOST || '0.0.0.0';
 
-  app.listen(PORT, () => {
+  app.listen(PORT, HOST, () => {
     console.log(`\n  ╔══════════════════════════════════════════════╗`);
     console.log(`  ║  AgentMemory Hub MCP (unified) v${VERSION}        ║`);
     console.log(`  ║  Stateless: POST http://localhost:${PORT}/mcp    ║`);

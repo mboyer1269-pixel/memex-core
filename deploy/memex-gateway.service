@@ -1,0 +1,26 @@
+[Unit]
+Description=Memex Core MCP Gateway (stateless HTTP + SSE)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=memex
+Group=memex
+WorkingDirectory=/opt/memex-core
+EnvironmentFile=/etc/memex-core/memex.env
+ExecStart=/usr/bin/node --experimental-strip-types src/mcp/unified-server.ts --http
+Restart=always
+RestartSec=5
+
+# Durcissement
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/memex-core
+PrivateTmp=true
+CapabilityBoundingSet=
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
