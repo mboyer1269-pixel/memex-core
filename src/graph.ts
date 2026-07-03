@@ -46,6 +46,49 @@ const VALID_RELATION_TYPES = ["OWNS", "USES", "DEPENDS_ON", "CREATED_BY", "ASSIG
 
 let db: ReturnType<typeof Database>;
 
+const SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS meta (
+    schema_version TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  INSERT OR IGNORE INTO meta (schema_version, created_at, updated_at) VALUES ('v0.5.1', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+  CREATE TABLE IF NOT EXISTS entities (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    namespace TEXT NOT NULL,
+    name TEXT,
+    properties TEXT,
+    source TEXT,
+    originId TEXT,
+    sourceHash TEXT,
+    confidence REAL,
+    validFrom TEXT,
+    validTo TEXT,
+    observedAt TEXT,
+    createdAt TEXT,
+    updatedAt TEXT
+  );
+  CREATE TABLE IF NOT EXISTS relations (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    sourceId TEXT NOT NULL,
+    targetId TEXT NOT NULL,
+    namespace TEXT NOT NULL,
+    properties TEXT,
+    source TEXT,
+    originId TEXT,
+    sourceHash TEXT,
+    confidence REAL,
+    validFrom TEXT,
+    validTo TEXT,
+    observedAt TEXT,
+    createdAt TEXT,
+    updatedAt TEXT
+  );
+`;
+
 export function initGraph(dbPath?: string, readonly: boolean = false): void {
   const finalPath = dbPath || path.resolve(__dirname, '..', 'data', 'graph.db');
   
@@ -53,65 +96,48 @@ export function initGraph(dbPath?: string, readonly: boolean = false): void {
     try { db.close(); } catch (e) {}
   }
 
-  // Ensure directory exists if not readonly and not in-memory
+  // Ensure directory exists if not in-memory
   const dir = path.dirname(finalPath);
-  if (!readonly && finalPath !== ':memory:' && !fs.existsSync(dir)) {
+  if (finalPath !== ':memory:' && !fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  
+
+  // A readonly open on a nonexistent file throws SQLITE_CANTOPEN and crashes
+  // the MCP server on first run. Bootstrap an empty schema first.
+  if (readonly && finalPath !== ':memory:' && !fs.existsSync(finalPath)) {
+    const bootstrap = new Database(finalPath);
+    bootstrap.pragma('journal_mode = WAL');
+    bootstrap.exec(SCHEMA_SQL);
+    bootstrap.close();
+  }
+
   db = new Database(finalPath, readonly ? { readonly: true } : undefined);
   if (!readonly && finalPath !== ':memory:') {
     db.pragma('journal_mode = WAL');
   }
   
   if (!readonly) {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS meta (
-        schema_version TEXT PRIMARY KEY,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      INSERT OR IGNORE INTO meta (schema_version, created_at, updated_at) VALUES ('v0.5.1', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-      
-      CREATE TABLE IF NOT EXISTS entities (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        namespace TEXT NOT NULL,
-        name TEXT,
-        properties TEXT,
-        source TEXT,
-        originId TEXT,
-        sourceHash TEXT,
-        confidence REAL,
-        validFrom TEXT,
-        validTo TEXT,
-        observedAt TEXT,
-        createdAt TEXT,
-        updatedAt TEXT
-      );
-      CREATE TABLE IF NOT EXISTS relations (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        sourceId TEXT NOT NULL,
-        targetId TEXT NOT NULL,
-        namespace TEXT NOT NULL,
-        properties TEXT,
-        source TEXT,
-        originId TEXT,
-        sourceHash TEXT,
-        confidence REAL,
-        validFrom TEXT,
-        validTo TEXT,
-        observedAt TEXT,
-        createdAt TEXT,
-        updatedAt TEXT
-      );
-    `);
+    db.exec(SCHEMA_SQL);
   }
 }
 
 export function closeGraph(): void {
   if (db) db.close();
+}
+
+/**
+ * Read a worker_meta value (e.g. 'last_sleep_cycle_at'). The table is
+ * created by the BackgroundWorker; on a fresh DB or a readonly server it
+ * may not exist yet — returns null instead of throwing.
+ */
+export function getWorkerMetaValue(key: string): string | null {
+  if (!db) return null;
+  try {
+    const row = db.prepare('SELECT value FROM worker_meta WHERE key = ?').get(key) as any;
+    return row ? String(row.value) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function runInTransaction<T>(fn: () => T): T {
@@ -299,10 +325,99 @@ export function getNeighbors(entityId: string, limit?: number): { entity: Entity
   return { entity, relations };
 }
 
-export function getTimeline(namespace: string, opts?: any): Entity[] {
-  const stmt = db.prepare('SELECT * FROM entities WHERE namespace = ? ORDER BY createdAt DESC LIMIT 50');
-  const rows = stmt.all(namespace) as any[];
+export interface TimelineOptions {
+  /** Max rows to return. Default 50, capped at 500. */
+  limit?: number;
+  /** Rows to skip — enables pagination. Default 0. */
+  offset?: number;
+  /** Only entities created at/after this ISO timestamp. */
+  since?: string;
+  /** Filter by entity type. */
+  type?: string;
+}
+
+export function getTimeline(namespace: string, opts?: TimelineOptions): Entity[] {
+  let query = 'SELECT * FROM entities WHERE namespace = ?';
+  const params: any[] = [namespace];
+
+  if (opts?.type) {
+    query += ' AND type = ?';
+    params.push(opts.type);
+  }
+  if (opts?.since) {
+    query += ' AND createdAt >= ?';
+    params.push(opts.since);
+  }
+
+  const rawLimit = Number(opts?.limit ?? 50);
+  const limit = isNaN(rawLimit) ? 50 : Math.max(1, Math.min(rawLimit, 500));
+  const rawOffset = Number(opts?.offset ?? 0);
+  const offset = isNaN(rawOffset) ? 0 : Math.max(0, rawOffset);
+
+  query += ' ORDER BY createdAt DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  const rows = db.prepare(query).all(...params) as any[];
   return rows.map(r => ({ ...r, properties: r.properties ? JSON.parse(r.properties) : undefined } as Entity));
+}
+
+/**
+ * Deterministic forgetting (R4): BFS over SUPERSEDES relations starting from
+ * a new entity. Every reachable target is transitively superseded — no LLM in
+ * the critical path, fully testable.
+ *
+ * When `apply` is true (default), superseded entities get their validity
+ * window closed (validTo = now) and a `status: 'superseded'` property, which
+ * excludes them from future context packs without deleting audit history.
+ */
+export function findSupersededEntities(
+  newEntityId: string,
+  namespace: string,
+  opts?: { apply?: boolean }
+): string[] {
+  const apply = opts?.apply !== false;
+  const now = new Date().toISOString();
+
+  const relStmt = db.prepare(
+    `SELECT targetId FROM relations WHERE type = 'SUPERSEDES' AND sourceId = ? AND namespace = ?`
+  );
+
+  const queue: string[] = [newEntityId];
+  const visited = new Set<string>([newEntityId]);
+  const superseded: string[] = [];
+
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const targets = relStmt.all(id, namespace) as Array<{ targetId: string }>;
+
+    for (const { targetId } of targets) {
+      if (visited.has(targetId)) continue; // cycle guard
+      visited.add(targetId);
+      superseded.push(targetId);
+      queue.push(targetId);
+    }
+  }
+
+  if (apply && superseded.length > 0) {
+    const getStmt = db.prepare('SELECT properties FROM entities WHERE id = ?');
+    const updateStmt = db.prepare(
+      'UPDATE entities SET validTo = ?, updatedAt = ?, properties = ? WHERE id = ? AND namespace = ?'
+    );
+    const applyAll = db.transaction(() => {
+      for (const id of superseded) {
+        const row = getStmt.get(id) as any;
+        if (!row) continue;
+        let props: Record<string, any> = {};
+        try { props = row.properties ? JSON.parse(row.properties) : {}; } catch { /* keep {} */ }
+        props.status = 'superseded';
+        props.supersededBy = newEntityId;
+        updateStmt.run(now, now, JSON.stringify(props), id, namespace);
+      }
+    });
+    applyAll();
+  }
+
+  return superseded;
 }
 
 export function buildContextPack(request: { entityId: string, namespace: string, maxFacts?: number, maxRelations?: number }): any {

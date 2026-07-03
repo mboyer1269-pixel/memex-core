@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { MemoryStatus } from '../fabric/types.ts';
+import { parseFrontmatter, serializeFrontmatter, unionArrays } from './frontmatter.ts';
+import type { FrontmatterMap } from './frontmatter.ts';
+import { searchFtsIndex } from './fts-index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,7 +19,8 @@ const MAX_SEARCH_RESULTS = 25;
 export interface VaultMetadata {
   confidence?: number;
   source_session?: string;
-  status?: 'active' | 'deprecated';
+  /** Full fabric vocabulary — not just 'active' | 'deprecated'. */
+  status?: MemoryStatus;
   contradicts?: string[];
   tags?: string[];
 }
@@ -28,9 +33,12 @@ function resolveAndGuard(filepath: string): string {
   // Normalize separators to OS-native, then resolve against vault root
   const normalized = filepath.replace(/\\/g, '/');
   const resolved = path.resolve(VAULT_ROOT, normalized);
-  
-  // Guard: resolved path MUST start with VAULT_ROOT
-  if (!resolved.startsWith(VAULT_ROOT)) {
+
+  // Guard: resolved path MUST be VAULT_ROOT itself or live strictly inside it.
+  // A bare startsWith(VAULT_ROOT) is unsafe on Windows: it lets sibling
+  // directories that share the prefix pass (e.g. "...\vault_extra\evil.md").
+  const guardPrefix = VAULT_ROOT.endsWith(path.sep) ? VAULT_ROOT : VAULT_ROOT + path.sep;
+  if (resolved !== VAULT_ROOT && !resolved.startsWith(guardPrefix)) {
     throw new Error(`Path traversal blocked: ${filepath}`);
   }
   return resolved;
@@ -81,35 +89,44 @@ export function writeVaultFile(filepath: string, content: string, meta?: VaultMe
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  // PROVENANCE: Build YAML frontmatter
-  let bodyContent = content;
-  
-  // Strip existing frontmatter if present to avoid duplication
-  if (bodyContent.startsWith('---')) {
-    const endIdx = bodyContent.indexOf('---', 3);
-    if (endIdx !== -1) {
-      bodyContent = bodyContent.substring(endIdx + 3).trimStart();
-    }
+  // PROVENANCE: Build YAML frontmatter with a three-way merge so partial
+  // updates (e.g. deprecating a file) never destroy historical metadata:
+  //   existing file on disk  <  frontmatter inside `content`  <  explicit `meta`
+  const incoming = parseFrontmatter(content);
+  const bodyContent = incoming.body.trimStart();
+
+  let existingMeta: FrontmatterMap = {};
+  if (fs.existsSync(fullPath)) {
+    try {
+      existingMeta = parseFrontmatter(fs.readFileSync(fullPath, 'utf8')).meta;
+    } catch { /* unreadable existing file — start fresh */ }
   }
 
-  const timestamp = new Date().toISOString();
-  const yamlLines = [
-    '---',
-    `updated_at: "${timestamp}"`,
-    `confidence: ${meta?.confidence ?? 1.0}`,
-    `source_session: "${(meta?.source_session ?? 'memex-core').replace(/"/g, '\\"')}"`,
-    `status: "${meta?.status ?? 'active'}"`
-  ];
-  
-  if (meta?.contradicts && meta.contradicts.length > 0) {
-    yamlLines.push(`contradicts: [${meta.contradicts.map(c => `"${c.replace(/"/g, '\\"')}"`).join(', ')}]`);
+  const merged: FrontmatterMap = { ...existingMeta, ...incoming.meta };
+
+  if (meta?.confidence !== undefined) merged.confidence = meta.confidence;
+  if (meta?.source_session !== undefined) merged.source_session = meta.source_session;
+  if (meta?.status !== undefined) merged.status = meta.status;
+  // Arrays are unioned, not replaced: audit trails (contradicts, deprecated_by
+  // tags) accumulate instead of silently vanishing.
+  if (meta?.contradicts !== undefined) {
+    merged.contradicts = unionArrays(merged.contradicts as string[] | undefined, meta.contradicts);
   }
-  if (meta?.tags && meta.tags.length > 0) {
-    yamlLines.push(`tags: [${meta.tags.map(t => `"${t.replace(/"/g, '\\"')}"`).join(', ')}]`);
+  if (meta?.tags !== undefined) {
+    merged.tags = unionArrays(merged.tags as string[] | undefined, meta.tags);
   }
-  yamlLines.push('---', '');
-  
-  const finalContent = yamlLines.join('\n') + '\n' + bodyContent;
+
+  // Defaults only apply when the field is absent everywhere
+  if (merged.confidence === undefined) merged.confidence = 1.0;
+  if (merged.source_session === undefined) merged.source_session = 'memex-core';
+  if (merged.status === undefined) merged.status = 'active';
+  if (merged.created_at === undefined) merged.created_at = new Date().toISOString();
+  merged.updated_at = new Date().toISOString();
+
+  if (Array.isArray(merged.contradicts) && merged.contradicts.length === 0) delete merged.contradicts;
+  if (Array.isArray(merged.tags) && merged.tags.length === 0) delete merged.tags;
+
+  const finalContent = serializeFrontmatter(merged) + '\n' + bodyContent;
 
   fs.writeFileSync(fullPath, finalContent, 'utf8');
   
@@ -120,6 +137,15 @@ export function writeVaultFile(filepath: string, content: string, meta?: VaultMe
 
 export function searchVault(query: string, includeDeprecated: boolean = false): any[] {
   ensureVaultRoot();
+
+  // Fast path: SQLite FTS5 index (bm25 x confidence x recency ranking).
+  // Falls back to the filesystem scan when FTS is unavailable or the query
+  // produces no indexable tokens.
+  const ftsResults = searchFtsIndex(VAULT_ROOT, query, includeDeprecated, MAX_SEARCH_RESULTS);
+  if (ftsResults !== null) {
+    return ftsResults.map(r => ({ filepath: r.filepath, preview: r.preview }));
+  }
+
   const results: any[] = [];
   const lowerQuery = query.toLowerCase();
   
