@@ -1,7 +1,7 @@
 {
   "name": "memex-core",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
     "cli": "pwsh ./bin/memex-core.ps1",
@@ -15,6 +15,7 @@
     "mcp": "node --experimental-strip-types src/mcp/server.ts",
     "gateway": "node --experimental-strip-types src/mcp/gateway.ts",
     "mint-handle": "node --experimental-strip-types src/mcp/mint-handle-cli.ts",
+    "bench": "node --experimental-strip-types bench/read-path.bench.ts",
     "worker": "node --experimental-strip-types src/ai/worker.ts",
     "test-milestone1": "node --experimental-strip-types tests/test-milestone1.ts"
   },
