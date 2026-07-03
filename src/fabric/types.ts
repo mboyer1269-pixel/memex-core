@@ -180,6 +180,8 @@ export interface ContextPackItem {
   status: MemoryStatus;
   content: string;
   confidence: number;
+  /** confidence x Ebbinghaus temporal decay at pack-assembly time. */
+  effectiveConfidence?: number;
   /** Explainability: why this item was selected for this pack. */
   whyIncluded: string;
   source: string;

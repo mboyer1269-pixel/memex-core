@@ -235,6 +235,19 @@ export function admitMemory(candidate: MemoryCandidate): MemoryAdmissionDecision
   };
 }
 
-export function isContextEligible(status: string): boolean {
-  return status === 'verified';
+/**
+ * Escalation threshold: an 'active' memory whose EFFECTIVE confidence
+ * (declared confidence x temporal decay) meets this bar is context-eligible
+ * without human verification. This unblocks autonomous operation while
+ * keeping low-confidence or stale material behind human review.
+ */
+export const ACTIVE_ELIGIBILITY_THRESHOLD = 0.8;
+
+export function isContextEligible(status: string, effectiveConfidence?: number): boolean {
+  if (status === 'verified') return true;
+  if (status === 'active') {
+    return typeof effectiveConfidence === 'number'
+      && effectiveConfidence >= ACTIVE_ELIGIBILITY_THRESHOLD;
+  }
+  return false;
 }
