@@ -37,18 +37,23 @@ test('MCP transport parity — INCOHÉRENCE #10 / R1', async (t) => {
     );
   });
 
-  await t.test('both transports import the shared tool module (no drift possible)', () => {
+  await t.test('both transports are thin shims over unified-server.ts (no drift possible)', () => {
     const serverSrc = fs.readFileSync(path.resolve(__dirname, '../src/mcp/server.ts'), 'utf8');
     const gatewaySrc = fs.readFileSync(path.resolve(__dirname, '../src/mcp/gateway.ts'), 'utf8');
+    const unifiedSrc = fs.readFileSync(path.resolve(__dirname, '../src/mcp/unified-server.ts'), 'utf8');
 
-    for (const [name, src] of [['server.ts', serverSrc], ['gateway.ts', gatewaySrc]] as const) {
-      assert.ok(src.includes("from './tools.ts'"), `${name} must use the shared tool handlers`);
-      assert.ok(src.includes('handleToolCall'), `${name} must delegate tool calls`);
-      assert.ok(src.includes('handleResourceRead'), `${name} must delegate resource reads`);
-    }
+    // The single source of truth wires the shared handlers and the access gate
+    assert.ok(unifiedSrc.includes("from './tools.ts'"), 'unified-server.ts must use the shared tool handlers');
+    assert.ok(unifiedSrc.includes('handleToolCall'), 'unified-server.ts must delegate tool calls');
+    assert.ok(unifiedSrc.includes('handleResourceRead'), 'unified-server.ts must delegate resource reads');
+    assert.ok(unifiedSrc.includes('decideAccess'), 'unified-server.ts must gate every tool call');
 
-    // No inline tool implementations left behind in either transport
-    for (const [name, src] of [['server.ts', serverSrc], ['gateway.ts', gatewaySrc]] as const) {
+    // Entry shims delegate — zero logic, zero duplication
+    assert.ok(serverSrc.includes("from './unified-server.ts'"), 'server.ts must delegate to unified-server.ts');
+    assert.ok(gatewaySrc.includes("from './unified-server.ts'"), 'gateway.ts must delegate to unified-server.ts');
+
+    // No inline tool implementations anywhere in the transport layer
+    for (const [name, src] of [['server.ts', serverSrc], ['gateway.ts', gatewaySrc], ['unified-server.ts', unifiedSrc]] as const) {
       assert.ok(!src.includes("name === 'agentmemory_"), `${name} must not re-implement tool routing inline`);
     }
   });
@@ -100,12 +105,12 @@ test('MCP transport parity — INCOHÉRENCE #10 / R1', async (t) => {
     assert.ok(!result.content[0].text.includes('sleep_cycle'));
   });
 
-  await t.test('gateway routes POST /message strictly by sessionId (BUG #3)', () => {
-    const gatewaySrc = fs.readFileSync(path.resolve(__dirname, '../src/mcp/gateway.ts'), 'utf8');
-    assert.ok(gatewaySrc.includes('req.query.sessionId'), 'must read sessionId from the query string');
-    assert.ok(gatewaySrc.includes('activeTransports.get(sessionId)'), 'must look up the exact transport');
-    assert.ok(!gatewaySrc.includes('for (const [, entry] of activeTransports)'), 'must not broadcast to all transports');
-    assert.ok(gatewaySrc.includes('transport.sessionId'), 'must key transports by their own sessionId');
+  await t.test('SSE routes POST /message strictly by sessionId (BUG #3)', () => {
+    const unifiedSrc = fs.readFileSync(path.resolve(__dirname, '../src/mcp/unified-server.ts'), 'utf8');
+    assert.ok(unifiedSrc.includes('req.query.sessionId'), 'must read sessionId from the query string');
+    assert.ok(unifiedSrc.includes('activeTransports.get(sessionId)'), 'must look up the exact transport');
+    assert.ok(!unifiedSrc.includes('for (const [, entry] of activeTransports)'), 'must not broadcast to all transports');
+    assert.ok(unifiedSrc.includes('transport.sessionId'), 'must key transports by their own sessionId');
   });
 
   closeGraph();
