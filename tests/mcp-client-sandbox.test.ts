@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { getAuthorizedTools, getAuthorizedResources } from '../src/mcp/capabilities.ts';
+import { initGraph, closeGraph } from '../src/graph.ts';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** Stdio MCP spawn + handshake can exceed 5s when the full suite runs in parallel on Windows. */
+const CONNECT_TIMEOUT_MS = 15_000;
 
 // Helper to enforce timeout
 async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -15,9 +23,16 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, message: string):
 }
 
 test('MCP Client Sandbox v0.6d', async (t) => {
+  const dbPath = path.resolve(__dirname, '../data/test-mcp-client-sandbox.db');
+  if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+  initGraph(dbPath, false);
+  closeGraph();
+
+  const serverPath = path.resolve(__dirname, '../src/mcp/server.ts');
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ['--experimental-strip-types', path.resolve(process.cwd(), 'src/mcp/server.ts')],
+    args: ['--experimental-strip-types', '--no-warnings', serverPath],
+    env: { ...process.env, AGENTMEMORY_DB_PATH: dbPath },
     stderr: 'pipe' // Suppress and monitor stderr instead of inheriting
   });
 
@@ -34,7 +49,7 @@ test('MCP Client Sandbox v0.6d', async (t) => {
 
   try {
     // 1. Connection with strict timeout (protects against infinite hangs)
-    await withTimeout(client.connect(transport), 5000, 'Server connection timed out');
+    await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, 'Server connection timed out');
 
     // 2. Discover Tools - Verify exact match with authorized fixtures
     const toolsResult = await withTimeout(client.listTools(), 2000, 'List tools timed out');
@@ -82,11 +97,15 @@ test('MCP Client Sandbox v0.6d', async (t) => {
   } finally {
     // 6. Test Process Cleanup and Stdio Integrity
     await client.close();
-    
+    await transport.close();
+
     // Check that stderr didn't log random arbitrary output (basic sanity)
     assert.ok(typeof stderrLogs === 'string', 'stderr logs should be captured');
-    
-    // Small wait to ensure OS cleans up the zombie process
+
+    // Small wait to ensure OS cleans up the child process and releases the DB
     await new Promise(resolve => setTimeout(resolve, 100));
+    if (fs.existsSync(dbPath)) {
+      fs.unlinkSync(dbPath);
+    }
   }
 });
