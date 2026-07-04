@@ -73,8 +73,8 @@ systemctl status memex-gateway memex-worker
 
 | Réglage | Valeur | Raison |
 |---|---|---|
-| `GATEWAY_DEFAULT_ACCESS` | `read_only` | Le token partagé ne peut PAS écrire. Toute écriture exige un handle nominatif — chaque écriture est donc attribuée à un agent identifié dans le trust ledger. |
-| `GATEWAY_HOST` | `127.0.0.1` | Jamais exposé directement ; TLS et exposition gérés par Caddy uniquement. |
+| `GATEWAY_DEFAULT_ACCESS` | défini explicitement à `read_only` par le script VPS | Le défaut du binaire est maintenant `read_only`. Un déploiement doit déclarer explicitement la valeur voulue au lieu d'hériter d'un accès implicite. |
+| `GATEWAY_HOST` | défini explicitement à `127.0.0.1` par le script VPS | Le défaut du binaire est maintenant `127.0.0.1`. Toute exposition réseau doit être un choix explicite, derrière Caddy/TLS. |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Tourne sur 4 GB de RAM. Le worker s'en sert pour les tâches low/medium à 0 $. Mets `llama3` si ton VPS a 8 GB+. |
 | Worker sleep cycle | 24 h (persisté) | Un redémarrage ne re-déclenche pas le cycle. |
 
@@ -116,9 +116,9 @@ client correspondant. Règles :
 - **Downgrade-only** : avec `GATEWAY_DEFAULT_ACCESS=read_only`, un handle
   `read_write` serait refusé (403)… donc pour permettre les écritures
   nominatives, mets `GATEWAY_DEFAULT_ACCESS=read_write` dans
-  `/etc/memex-core/memex.env` et redémarre : les handles `read_only`
-  restent bridés à la lecture, et le token partagé brut donne `read_write`
-  — à réserver à toi seul.
+  `/etc/memex-core/memex.env` et redémarre. Le profil remote continue
+  d'exclure `agentmemory_write_vault_file`; les écritures distantes passent
+  par `agentmemory_submit_proposal`, pas par mutation directe du vault.
 - Expiration max 30 jours : re-minter est une commande. Mets un rappel
   mensuel, ou un cron qui régénère et pousse les nouveaux handles vers tes
   secrets (Vercel env, n8n credentials).

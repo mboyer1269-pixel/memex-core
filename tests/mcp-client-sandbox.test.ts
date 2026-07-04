@@ -1,9 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { getAuthorizedTools, getAuthorizedResources } from '../src/mcp/capabilities.ts';
+import { initGraph, closeGraph } from '../src/graph.ts';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** Stdio MCP spawn + handshake can exceed 5s when the full suite runs in parallel on Windows. */
+const CONNECT_TIMEOUT_MS = 15_000;
+const CHILD_EXIT_TIMEOUT_MS = 5_000;
+const SQLITE_UNLINK_ATTEMPTS = 3;
+const SQLITE_UNLINK_RETRY_MS = 100;
 
 // Helper to enforce timeout
 async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -14,10 +25,49 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, message: string):
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function unlinkWithBusyRetry(filePath: string): Promise<void> {
+  for (let attempt = 1; attempt <= SQLITE_UNLINK_ATTEMPTS; attempt++) {
+    try {
+      fs.unlinkSync(filePath);
+      return;
+    } catch (err: any) {
+      if (err?.code === 'ENOENT') return;
+      if (err?.code !== 'EBUSY' || attempt === SQLITE_UNLINK_ATTEMPTS) throw err;
+      await delay(SQLITE_UNLINK_RETRY_MS);
+    }
+  }
+}
+
+async function removeSqliteFiles(dbPath: string): Promise<void> {
+  for (const suffix of ['', '-wal', '-shm']) {
+    await unlinkWithBusyRetry(`${dbPath}${suffix}`);
+  }
+}
+
+async function waitForChildExit(child: any): Promise<void> {
+  if (!child || child.exitCode !== null) return;
+  const closed = await Promise.race([
+    new Promise<boolean>(resolve => child.once('close', () => resolve(true))),
+    delay(CHILD_EXIT_TIMEOUT_MS).then(() => false)
+  ]);
+  assert.strictEqual(closed, true, 'stdio child process must exit before deleting SQLite files');
+}
+
 test('MCP Client Sandbox v0.6d', async (t) => {
+  const dbPath = path.resolve(__dirname, '../data/test-mcp-client-sandbox.db');
+  await removeSqliteFiles(dbPath);
+  initGraph(dbPath, false);
+  closeGraph();
+
+  const serverPath = path.resolve(__dirname, '../src/mcp/server.ts');
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ['--experimental-strip-types', path.resolve(process.cwd(), 'src/mcp/server.ts')],
+    args: ['--experimental-strip-types', '--no-warnings', serverPath],
+    env: { ...process.env, AGENTMEMORY_DB_PATH: dbPath },
     stderr: 'pipe' // Suppress and monitor stderr instead of inheriting
   });
 
@@ -28,13 +78,15 @@ test('MCP Client Sandbox v0.6d', async (t) => {
   );
 
   let stderrLogs = '';
-  transport.stderr?.on('data', (data) => {
-    stderrLogs += data.toString();
-  });
+  let childProcess: any = null;
 
   try {
     // 1. Connection with strict timeout (protects against infinite hangs)
-    await withTimeout(client.connect(transport), 5000, 'Server connection timed out');
+    await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, 'Server connection timed out');
+    childProcess = (transport as any)._process;
+    transport.stderr?.on('data', (data) => {
+      stderrLogs += data.toString();
+    });
 
     // 2. Discover Tools - Verify exact match with authorized fixtures
     const toolsResult = await withTimeout(client.listTools(), 2000, 'List tools timed out');
@@ -81,12 +133,14 @@ test('MCP Client Sandbox v0.6d', async (t) => {
 
   } finally {
     // 6. Test Process Cleanup and Stdio Integrity
-    await client.close();
-    
+    const childBeforeClose = childProcess ?? (transport as any)._process;
+    try { await client.close(); } catch { /* already closed */ }
+    try { await transport.close(); } catch { /* already closed */ }
+    await waitForChildExit(childBeforeClose);
+
     // Check that stderr didn't log random arbitrary output (basic sanity)
     assert.ok(typeof stderrLogs === 'string', 'stderr logs should be captured');
-    
-    // Small wait to ensure OS cleans up the zombie process
-    await new Promise(resolve => setTimeout(resolve, 100));
+
+    await removeSqliteFiles(dbPath);
   }
 });

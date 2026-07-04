@@ -17,7 +17,13 @@ import {
   READ_TOOLS
 } from '../src/mcp/access.ts';
 import { mintHandle, verifyHandle } from '../src/mcp/handles.ts';
-import { guardedToolCall, dispatchStatelessRpc, resolveHttpCaller } from '../src/mcp/unified-server.ts';
+import {
+  guardedToolCall,
+  dispatchStatelessRpc,
+  resolveHttpCaller,
+  createHttpApp,
+  callerHash
+} from '../src/mcp/unified-server.ts';
 import { getAuthorizedTools } from '../src/mcp/capabilities.ts';
 import { initGraph, closeGraph } from '../src/graph.ts';
 
@@ -243,7 +249,7 @@ test('resolveHttpCaller — bearer token and handle auth', async (t) => {
   await t.test('valid gateway token → default access', () => {
     const out = resolveHttpCaller('Bearer gw-token-123');
     assert.ok(out.ok);
-    assert.strictEqual(out.caller.access, 'read_write');
+    assert.strictEqual(out.caller.access, 'read_only');
     assert.strictEqual(out.caller.subject, 'gateway-token');
   });
 
@@ -282,4 +288,120 @@ test('resolveHttpCaller — bearer token and handle auth', async (t) => {
   if (savedToken === undefined) delete process.env.GATEWAY_TOKEN; else process.env.GATEWAY_TOKEN = savedToken;
   if (savedSecret === undefined) delete process.env.AGENTMEMORY_HANDLE_SECRET; else process.env.AGENTMEMORY_HANDLE_SECRET = savedSecret;
   if (savedDefault === undefined) delete process.env.GATEWAY_DEFAULT_ACCESS; else process.env.GATEWAY_DEFAULT_ACCESS = savedDefault;
+});
+
+test('remote MCP profiles deny direct vault writes even with read_write auth', async (t) => {
+  const savedToken = process.env.GATEWAY_TOKEN;
+  const savedSecret = process.env.AGENTMEMORY_HANDLE_SECRET;
+  const savedDefault = process.env.GATEWAY_DEFAULT_ACCESS;
+
+  process.env.GATEWAY_TOKEN = 'gw-token-remote';
+  process.env.AGENTMEMORY_HANDLE_SECRET = SECRET;
+  process.env.GATEWAY_DEFAULT_ACCESS = 'read_write';
+
+  try {
+    await t.test('stateless HTTP rejects agentmemory_write_vault_file for read_write handles', async () => {
+      const app = createHttpApp();
+      const server: any = await new Promise(resolve => {
+        const s = app.listen(0, '127.0.0.1', () => resolve(s));
+      });
+      try {
+        const address = server.address();
+        const port = typeof address === 'object' && address ? address.port : 0;
+        const handle = mintHandle('remote_writer', 'read_write', SECRET, 3600);
+        const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${handle}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 42,
+            method: 'tools/call',
+            params: {
+              name: 'agentmemory_write_vault_file',
+              arguments: { filepath: 'facts/remote.md', content: 'no direct remote writes' }
+            }
+          })
+        });
+        assert.strictEqual(response.status, 200);
+        const payload: any = await response.json();
+        assert.strictEqual(payload.id, 42);
+        assert.match(payload.error.message, /not exposed on the remote MCP profile/);
+      } finally {
+        await new Promise(resolve => server.close(resolve));
+      }
+    });
+
+    await t.test('SSE caller identity with remote profile is rejected before tool execution', async () => {
+      await assert.rejects(
+        () => guardedToolCall(
+          { access: 'read_write', subject: 'sse_writer', toolProfile: 'remote' },
+          'agentmemory_write_vault_file',
+          { filepath: 'facts/sse.md', content: 'no direct sse writes' }
+        ),
+        (err: any) => err instanceof McpError && /not exposed on the remote MCP profile/.test(err.message)
+      );
+    });
+  } finally {
+    if (savedToken === undefined) delete process.env.GATEWAY_TOKEN; else process.env.GATEWAY_TOKEN = savedToken;
+    if (savedSecret === undefined) delete process.env.AGENTMEMORY_HANDLE_SECRET; else process.env.AGENTMEMORY_HANDLE_SECRET = savedSecret;
+    if (savedDefault === undefined) delete process.env.GATEWAY_DEFAULT_ACCESS; else process.env.GATEWAY_DEFAULT_ACCESS = savedDefault;
+  }
+});
+
+test('legacy SSE /message requires the same authenticated caller as /sse', async () => {
+  const savedToken = process.env.GATEWAY_TOKEN;
+  const savedSecret = process.env.AGENTMEMORY_HANDLE_SECRET;
+  const savedDefault = process.env.GATEWAY_DEFAULT_ACCESS;
+
+  process.env.GATEWAY_TOKEN = 'gw-token-sse';
+  process.env.AGENTMEMORY_HANDLE_SECRET = SECRET;
+  process.env.GATEWAY_DEFAULT_ACCESS = 'read_write';
+
+  const app = createHttpApp();
+  const sessionOwner = { access: 'read_write' as const, subject: 'gateway-token', toolProfile: 'remote' as const };
+  let postCount = 0;
+  (app as any).__activeTransports.set('session-1', {
+    callerHash: callerHash(sessionOwner),
+    server: { close: async () => {} },
+    transport: {
+      handlePostMessage: async (_req: any, res: any) => {
+        postCount++;
+        res.status(204).end();
+      }
+    }
+  });
+
+  const server: any = await new Promise(resolve => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+
+  try {
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    const valid = await fetch(`http://127.0.0.1:${port}/message?sessionId=session-1`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer gw-token-sse' }
+    });
+    assert.strictEqual(valid.status, 204);
+    assert.strictEqual(postCount, 1);
+
+    const stolenHandle = mintHandle('attacker', 'read_write', SECRET, 3600);
+    const stolen = await fetch(`http://127.0.0.1:${port}/message?sessionId=session-1`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${stolenHandle}` }
+    });
+    assert.strictEqual(stolen.status, 403);
+    const body: any = await stolen.json();
+    assert.match(body.error, /does not match the SSE session owner/);
+    assert.strictEqual(postCount, 1);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    if (savedToken === undefined) delete process.env.GATEWAY_TOKEN; else process.env.GATEWAY_TOKEN = savedToken;
+    if (savedSecret === undefined) delete process.env.AGENTMEMORY_HANDLE_SECRET; else process.env.AGENTMEMORY_HANDLE_SECRET = savedSecret;
+    if (savedDefault === undefined) delete process.env.GATEWAY_DEFAULT_ACCESS; else process.env.GATEWAY_DEFAULT_ACCESS = savedDefault;
+  }
 });

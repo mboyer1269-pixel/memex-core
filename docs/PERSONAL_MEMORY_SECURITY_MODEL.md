@@ -10,15 +10,16 @@
 2. **Human approval** (Michael) — required for writes, unlocks, high-risk admissions.
 3. **Ollama Librarian** — advisory. Classifies, flags, suggests. Decides nothing.
 
-## ⚠️ Finding from code audit (2026-07-01)
+## Remote write boundary
 
-`src/mcp/gateway.ts` line 94 exposes `agentmemory_write_vault_file` over HTTP,
-protected by a **single shared `GATEWAY_TOKEN`**. One leaked token = remote write
-access into the vault. This violates the propose→approve doctrine.
+Direct vault writes are local-only. The stdio/local profile may expose
+`agentmemory_write_vault_file` for an operator machine, but the remote MCP
+profile used by HTTP `/mcp` and legacy SSE excludes that tool even when the
+caller presents a valid `read_write` handle.
 
-**Remediation (PR-3):** remote tool profiles. The remote read profile excludes all
-write tools. Writes go through `/api/memory/propose` + approval. Until PR-3 ships,
-treat `GATEWAY_TOKEN` as write-capable and rotate it accordingly.
+Remote agents must submit memory through `agentmemory_submit_proposal`; direct
+Markdown mutation stays outside the remote tool surface so propose→approve
+remains the default governance path.
 
 ## Token strategy
 

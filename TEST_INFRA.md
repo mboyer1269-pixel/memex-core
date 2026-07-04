@@ -15,9 +15,14 @@
 | 6 | F6. Promotion logic | ORIGINAL_REQUEST §R3 | 5      | 5      | ✓      |
 
 ## Test Architecture
-- Test runner: `npm test` 
+- Fast gate: `npm test`
+- Limit/stress gate: `npm run test:limit`
 - Test case format: programmatic E2E tests in `tests/intake.test.ts`
 - Expected: all tests pass with exit code 0 when implementation is ready.
+
+`npm test` is the fast handoff gate. High-volume graph limit checks live in
+`npm run test:limit` so the default gate stays reliable on Windows while still
+keeping those tests executable and documented.
 
 ## Real-World Application Scenarios (Tier 4)
 | # | Scenario | Features Exercised | Complexity |
