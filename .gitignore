@@ -45,3 +45,7 @@ test_*.js
 
 # Agent config (local-only)
 .agents/
+
+# Agent validation cockpit (memex-gate.ps1)
+.agent-handoff/
+reports/
