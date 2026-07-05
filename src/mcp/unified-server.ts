@@ -20,6 +20,7 @@
  */
 
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 import express from 'express';
 import type { Request, Response } from 'express';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -34,7 +35,13 @@ import {
   McpError
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { getAuthorizedTools, getAuthorizedResources } from './capabilities.ts';
+import {
+  getAuthorizedTools,
+  getAuthorizedResources,
+  isKnownTool,
+  isToolAllowedInProfile,
+  type ToolProfile
+} from './capabilities.ts';
 import { handleToolCall, handleResourceRead, type ToolResult } from './tools.ts';
 import { decideAccess, defaultStdioAccess, canDowngradeTo, isAccessLevel, type AccessLevel } from './access.ts';
 import { verifyHandle, getHandleSecret } from './handles.ts';
@@ -46,6 +53,14 @@ import { VERSION } from '../version.ts';
 export interface CallerIdentity {
   access: AccessLevel;
   subject: string;
+  toolProfile?: ToolProfile;
+}
+
+export function callerHash(caller: CallerIdentity): string {
+  return crypto
+    .createHash('sha256')
+    .update(`${caller.subject}\0${caller.access}`)
+    .digest('hex');
 }
 
 /**
@@ -58,6 +73,14 @@ export async function guardedToolCall(
   name: string,
   args: Record<string, unknown>
 ): Promise<ToolResult> {
+  const toolProfile = caller.toolProfile ?? 'local';
+  if (isKnownTool(name) && !isToolAllowedInProfile(name, toolProfile)) {
+    throw new McpError(
+      ErrorCode.InvalidRequest,
+      `Tool '${name}' is not exposed on the ${toolProfile} MCP profile; use agentmemory_submit_proposal instead.`
+    );
+  }
+
   const decision = decideAccess(caller.access, name);
   if (!decision.allowed) {
     throw new McpError(ErrorCode.InvalidRequest, `Access denied for '${caller.subject}': ${decision.reason}`);
@@ -73,7 +96,7 @@ export function createMcpServer(caller: CallerIdentity, transportLabel: 'stdio' 
     { capabilities: { tools: {}, resources: {} } }
   );
 
-  srv.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: getAuthorizedTools() }));
+  srv.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: getAuthorizedTools(caller.toolProfile ?? 'local') }));
   srv.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: getAuthorizedResources() }));
   srv.setRequestHandler(ReadResourceRequestSchema, async (request) =>
     handleResourceRead(request.params.uri, transportLabel)
@@ -106,7 +129,7 @@ export async function runStdio(): Promise<void> {
 
   await bootstrapStorage();
 
-  const caller: CallerIdentity = { access: defaultStdioAccess(), subject: 'stdio-operator' };
+  const caller: CallerIdentity = { access: defaultStdioAccess(), subject: 'stdio-operator', toolProfile: 'local' };
   const server = createMcpServer(caller, 'stdio');
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -126,7 +149,7 @@ export async function runStdio(): Promise<void> {
 
 function gatewayDefaultAccess(): AccessLevel {
   const env = process.env.GATEWAY_DEFAULT_ACCESS;
-  return isAccessLevel(env) && env !== 'admin' ? env : 'read_write';
+  return isAccessLevel(env) && env !== 'admin' ? env : 'read_only';
 }
 
 type AuthResult = { ok: true; caller: CallerIdentity } | { ok: false; status: number; error: string };
@@ -209,7 +232,7 @@ export async function dispatchStatelessRpc(caller: CallerIdentity, msg: JsonRpcR
       case 'ping':
         return rpcResult(id, {});
       case 'tools/list':
-        return rpcResult(id, { tools: getAuthorizedTools() });
+        return rpcResult(id, { tools: getAuthorizedTools(caller.toolProfile ?? 'local') });
       case 'resources/list':
         return rpcResult(id, { resources: getAuthorizedResources() });
       case 'resources/read': {
@@ -256,7 +279,7 @@ export function createHttpApp(): express.Express {
     if (Array.isArray(body)) {
       const responses = [];
       for (const msg of body) {
-        const out = await dispatchStatelessRpc(auth.caller, msg);
+        const out = await dispatchStatelessRpc({ ...auth.caller, toolProfile: 'remote' }, msg);
         if (out) responses.push(out);
       }
       if (responses.length === 0) { res.status(202).end(); return; }
@@ -269,13 +292,13 @@ export function createHttpApp(): express.Express {
       return;
     }
 
-    const out = await dispatchStatelessRpc(auth.caller, body);
+    const out = await dispatchStatelessRpc({ ...auth.caller, toolProfile: 'remote' }, body);
     if (out === null) { res.status(202).end(); return; }
     res.json(out);
   });
 
   // ── Legacy stateful SSE (kept for older remote clients) ──
-  const activeTransports = new Map<string, { server: Server; transport: SSEServerTransport }>();
+  const activeTransports = new Map<string, { server: Server; transport: SSEServerTransport; callerHash: string }>();
 
   app.get('/sse', async (req, res) => {
     const auth = resolveHttpCaller(req.headers.authorization);
@@ -284,11 +307,12 @@ export function createHttpApp(): express.Express {
       return;
     }
 
-    const srv = createMcpServer(auth.caller, 'sse');
+    const caller: CallerIdentity = { ...auth.caller, toolProfile: 'remote' };
+    const srv = createMcpServer(caller, 'sse');
     const transport = new SSEServerTransport('/message', res);
     const sessionId = transport.sessionId;
-    activeTransports.set(sessionId, { server: srv, transport });
-    console.log(`[Gateway] New SSE connection: ${sessionId} (${auth.caller.subject}, ${auth.caller.access})`);
+    activeTransports.set(sessionId, { server: srv, transport, callerHash: callerHash(caller) });
+    console.log(`[Gateway] New SSE connection: ${sessionId} (${caller.subject}, ${caller.access})`);
 
     res.on('close', () => {
       console.log(`[Gateway] Client disconnected: ${sessionId}`);
@@ -301,6 +325,12 @@ export function createHttpApp(): express.Express {
 
   // NOTE: no express.json() here — SSEServerTransport reads the raw body itself.
   app.post('/message', async (req, res) => {
+    const auth = resolveHttpCaller(req.headers.authorization);
+    if (!auth.ok) {
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+
     const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : '';
     if (!sessionId) {
       res.status(400).json({ error: 'Missing sessionId query parameter.' });
@@ -309,6 +339,11 @@ export function createHttpApp(): express.Express {
     const entry = activeTransports.get(sessionId);
     if (!entry) {
       res.status(404).json({ error: `No active SSE session found for sessionId: ${sessionId}` });
+      return;
+    }
+    const caller: CallerIdentity = { ...auth.caller, toolProfile: 'remote' };
+    if (entry.callerHash !== callerHash(caller)) {
+      res.status(403).json({ error: 'Forbidden: Bearer credential does not match the SSE session owner.' });
       return;
     }
     try {
@@ -331,7 +366,7 @@ export async function runHttp(): Promise<void> {
   const PORT = Number(process.env.GATEWAY_PORT) || 3000;
   // Behind a reverse proxy (Caddy/nginx), set GATEWAY_HOST=127.0.0.1 so the
   // gateway is never reachable directly from the internet.
-  const HOST = process.env.GATEWAY_HOST || '0.0.0.0';
+  const HOST = process.env.GATEWAY_HOST || '127.0.0.1';
 
   app.listen(PORT, HOST, () => {
     console.log(`\n  ╔══════════════════════════════════════════════╗`);

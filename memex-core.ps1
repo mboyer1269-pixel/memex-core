@@ -167,7 +167,7 @@ UPSTREAM_VIEWER_PORT=3113
 
 switch ($Command) {
   'help' { Show-Help; exit 0 }
-  'doctor' { Invoke-Script "doctor"; exit 0 }
+  'doctor' { & (Join-Path $Root "scripts\memex-gate.ps1") doctor; exit $LASTEXITCODE }
   'start' { Invoke-Script "start"; exit 0 }
   'stop' { Invoke-Script "stop"; exit 0 }
   'status' { Invoke-Script "status"; exit 0 }
