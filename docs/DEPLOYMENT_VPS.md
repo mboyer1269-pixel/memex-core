@@ -5,6 +5,32 @@ servir de **mémoire persistante et gouvernée** à tout l'écosystème :
 Oria HQ (Joris), Hermes Agent, AlloMaud, tes sessions Cursor/Claude, et les
 clients mobiles.
 
+## Important: Hostinger Traefik VPS with existing agentmemory-7evd
+
+La suite de ce runbook décrit un déploiement générique Caddy/port `3000`.
+Sur le VPS Hostinger existant qui héberge déjà `agentmemory-7evd`, cette
+partie est une référence générique, pas une instruction d'exécution.
+
+Pour ce VPS Hostinger :
+
+- ne pas installer Caddy ;
+- ne pas toucher au service, au router Traefik, ni aux volumes
+  `agentmemory-7evd_*` ;
+- ne pas appeler `agentmemory-7evd` Memex Core ;
+- utiliser le Traefik existant avec un router distinct pour Memex Core lors
+  d'une phase future explicitement approuvée ;
+- configurer `GATEWAY_PORT=3101` et `GATEWAY_HOST=127.0.0.1` pour Memex
+  Core officiel ;
+- garder les chemins dédiés `/opt/memex-core`, `/var/lib/memex-core` et
+  `/etc/memex-core/memex.env` ;
+- ne pas brancher Oria HQ au VPS Memex tant que le transport VPS/SSE reste
+  PARK côté Oria v1.
+
+Voir aussi
+[`docs/MEMEX_CORE_VPS_DEPLOYMENT_BOUNDARY.md`](MEMEX_CORE_VPS_DEPLOYMENT_BOUNDARY.md)
+pour la frontière complète entre Oria HQ, Memex Core officiel, ProofLoop et
+`agentmemory-7evd`.
+
 ## 1. Architecture cible
 
 ```
